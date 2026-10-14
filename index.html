@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Image Quiz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<style>
+/* =========================================================
+   SETTINGS ARE IN THE <script> AT THE BOTTOM (FORMSPREE_URL)
+   ========================================================= */
+:root{
+  --paper:#E6EBEE;
+  --ink:#16222D;
+  --muted:#5B6B78;
+  --line:#C5D0D8;
+  --cobalt:#2F55E0;
+  --cobalt-ink:#FFFFFF;
+  --error:#B3261E;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:"Bricolage Grotesque",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  background:var(--paper);color:var(--ink);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+  -webkit-tap-highlight-color:transparent;overscroll-behavior:none;
+}
+.screen{display:none;height:100%;flex-direction:column}
+.screen.active{display:flex}
+
+/* Welcome */
+#welcome{justify-content:center;align-items:flex-start;padding:32px 28px;max-width:560px;margin:0 auto}
+#welcome h1{font-size:clamp(3rem,14vw,5.5rem);font-weight:800;line-height:.92;letter-spacing:-.03em}
+#welcome p{margin:20px 0 36px;font-size:1.15rem;line-height:1.45;color:var(--muted);max-width:32ch}
+
+.btn{
+  font:inherit;font-weight:600;font-size:1.1rem;border:0;cursor:pointer;
+  background:var(--cobalt);color:var(--cobalt-ink);
+  padding:16px 34px;border-radius:999px;min-height:54px;
+}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn:focus-visible,.choice:focus-visible,.link:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.link{font:inherit;background:none;border:0;color:var(--muted);text-decoration:underline;cursor:pointer;padding:10px;font-size:1rem}
+
+/* Grid */
+#grid{padding:14px}
+.hint{text-align:center;font-size:1rem;color:var(--muted);padding:4px 0 12px}
+.tiles{flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:10px;min-height:0}
+.tile{
+  position:relative;overflow:hidden;border-radius:6px;background:var(--line);
+  touch-action:none;cursor:pointer;
+}
+.tile img{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  filter:blur(32px) saturate(1.1);transform:scale(1.35);pointer-events:none;
+  -webkit-user-drag:none;
+}
+.tile .num{
+  position:absolute;left:10px;top:8px;font-size:2.4rem;font-weight:800;color:#fff;
+  text-shadow:0 1px 6px rgba(0,0,0,.35);pointer-events:none;
+}
+.tile .missing{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:10px;font-size:.85rem;color:var(--error)}
+.tile.pressing{outline:4px solid var(--cobalt);outline-offset:-4px}
+.grid-foot{display:flex;justify-content:center;padding:14px 0 4px}
+
+/* Full-screen viewer */
+#viewer{
+  position:fixed;inset:0;background:#000;display:none;z-index:10;touch-action:none;
+}
+#viewer.show{display:block}
+#viewer img{width:100%;height:100%;object-fit:contain;pointer-events:none;-webkit-user-drag:none}
+
+/* Answer */
+#answer{padding:28px 20px;max-width:560px;margin:0 auto;width:100%}
+#answer h2{font-size:clamp(1.8rem,7vw,2.6rem);font-weight:800;line-height:1.05;letter-spacing:-.02em;margin-bottom:24px}
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:26px}
+.choice{
+  font:inherit;font-size:2.6rem;font-weight:800;color:var(--ink);
+  background:#fff;border:3px solid var(--line);border-radius:6px;
+  aspect-ratio:1/1;cursor:pointer;
+}
+.choice[aria-pressed="true"]{background:var(--cobalt);border-color:var(--cobalt);color:var(--cobalt-ink)}
+.answer-actions{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.status{min-height:1.5em;margin-top:14px;font-size:1rem}
+.status.err{color:var(--error)}
+
+/* Done */
+#done{justify-content:center;padding:32px 28px;max-width:560px;margin:0 auto}
+#done h2{font-size:clamp(2.4rem,11vw,4rem);font-weight:800;line-height:.95;letter-spacing:-.03em}
+#done p{margin-top:16px;font-size:1.15rem;color:var(--muted)}
+
+@media (prefers-color-scheme:dark){
+  :root{--paper:#121A22;--ink:#E8EEF2;--muted:#9AABB8;--line:#2C3A46;--cobalt:#6C8CFF;--cobalt-ink:#0E1530}
+  .choice{background:#1A2530}
+}
+</style>
+</head>
+<body>
+
+<section id="welcome" class="screen active">
+  <h1>Welcome to the quiz</h1>
+  <p>You'll see four blurred pictures. Press and hold one to see it clearly. Look as many times as you like, then pick your favourite.</p>
+  <button class="btn" id="startBtn">Start</button>
+</section>
+
+<section id="grid" class="screen">
+  <div class="hint">Press and hold a picture to see it</div>
+  <div class="tiles" id="tiles"></div>
+  <div class="grid-foot"><button class="btn" id="toAnswerBtn">Enter answer</button></div>
+</section>
+
+<section id="answer" class="screen">
+  <h2>Which one did you like the most?</h2>
+  <div class="choices" id="choices"></div>
+  <div class="answer-actions">
+    <button class="btn" id="sendBtn" disabled>Send answer</button>
+    <button class="link" id="backBtn">Back to the pictures</button>
+  </div>
+  <div class="status" id="status" role="status"></div>
+</section>
+
+<section id="done" class="screen">
+  <h2>Thank you!</h2>
+  <p>Your answer has been sent.</p>
+</section>
+
+<div id="viewer" aria-hidden="true"><img id="viewerImg" alt=""></div>
+
+<script>
+/* ===================== SETTINGS ===================== */
+// 1. Paste your Formspree form link here:
+const FORMSPREE_URL = "https://formspree.io/f/mwlvrdao";
+
+// 2. Image files (put them in the "images" folder with these exact names):
+const IMAGES = [
+  "images/image1.jpg",
+  "images/image2.jpg",
+  "images/image3.jpg",
+  "images/image4.jpg"
+];
+
+// 3. How long (milliseconds) the finger must be held before the image opens.
+//    Short taps under this time do nothing and are not counted.
+const HOLD_DELAY_MS = 150;
+/* ==================================================== */
+
+const stats = IMAGES.map(() => ({ ms: 0, views: 0 }));
+let sessionStart = 0;
+let favorite = null;
+
+let holdTimer = null;      // waiting for the long-press threshold
+let pendingIndex = null;   // tile currently being pressed
+let activeIndex = null;    // tile currently shown full screen
+let viewStart = 0;
+
+const $ = id => document.getElementById(id);
+const viewer = $("viewer"), viewerImg = $("viewerImg");
+
+function show(id){
+  document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === id));
+}
+
+/* Preload so the full-screen image appears instantly */
+IMAGES.forEach(src => { const i = new Image(); i.src = src; });
+
+/* Build tiles */
+const tilesEl = $("tiles");
+IMAGES.forEach((src, i) => {
+  const t = document.createElement("div");
+  t.className = "tile";
+  t.dataset.index = i;
+  t.innerHTML = `<img src="${src}" alt="" draggable="false"><span class="num">${i + 1}</span>`;
+  t.querySelector("img").onerror = () => {
+    t.insertAdjacentHTML("beforeend", `<div class="missing">Missing file:<br>${src}</div>`);
+  };
+  t.addEventListener("pointerdown", e => startPress(e, i, t));
+  t.addEventListener("contextmenu", e => e.preventDefault());
+  tilesEl.appendChild(t);
+});
+
+function startPress(e, i, tile){
+  e.preventDefault();
+  if (activeIndex !== null || pendingIndex !== null) return; // one at a time
+  pendingIndex = i;
+  tile.classList.add("pressing");
+  holdTimer = setTimeout(() => openViewer(i), HOLD_DELAY_MS);
+}
+
+function openViewer(i){
+  holdTimer = null;
+  activeIndex = i;
+  viewerImg.src = IMAGES[i];
+  viewer.classList.add("show");
+  viewStart = performance.now();
+}
+
+function endPress(){
+  if (holdTimer){ clearTimeout(holdTimer); holdTimer = null; }
+  if (activeIndex !== null){
+    stats[activeIndex].ms += performance.now() - viewStart;
+    stats[activeIndex].views += 1;
+    activeIndex = null;
+    viewer.classList.remove("show");
+    viewerImg.removeAttribute("src");
+  }
+  pendingIndex = null;
+  document.querySelectorAll(".tile.pressing").forEach(t => t.classList.remove("pressing"));
+}
+
+/* Finger lifted anywhere (the viewer covers the tile, so listen on window) */
+window.addEventListener("pointerup", endPress);
+window.addEventListener("pointercancel", endPress);
+window.addEventListener("blur", endPress);
+document.addEventListener("visibilitychange", () => { if (document.hidden) endPress(); });
+viewer.addEventListener("contextmenu", e => e.preventDefault());
+
+/* Navigation */
+$("startBtn").onclick = () => { sessionStart = performance.now(); show("grid"); };
+$("toAnswerBtn").onclick = () => show("answer");
+$("backBtn").onclick = () => { $("status").textContent = ""; show("grid"); };
+
+/* Answer buttons 1–4 */
+const choicesEl = $("choices");
+IMAGES.forEach((_, i) => {
+  const b = document.createElement("button");
+  b.className = "choice";
+  b.textContent = i + 1;
+  b.setAttribute("aria-pressed", "false");
+  b.setAttribute("aria-label", "Image " + (i + 1));
+  b.onclick = () => {
+    favorite = i + 1;
+    choicesEl.querySelectorAll(".choice").forEach((c, k) => c.setAttribute("aria-pressed", String(k === i)));
+    $("sendBtn").disabled = false;
+  };
+  choicesEl.appendChild(b);
+});
+
+/* Send to Formspree */
+$("sendBtn").onclick = async () => {
+  const status = $("status"), btn = $("sendBtn");
+  status.className = "status";
+
+  if (FORMSPREE_URL.includes("YOUR_FORM_ID")){
+    status.className = "status err";
+    status.textContent = "Formspree link not set. Open index.html and paste your link into FORMSPREE_URL.";
+    return;
+  }
+
+  const sec = ms => Math.round(ms / 100) / 10; // 1 decimal place
+  const data = { favorite_image: "Image " + favorite };
+  stats.forEach((s, i) => {
+    data[`image${i + 1}_seconds`] = sec(s.ms);
+    data[`image${i + 1}_times_viewed`] = s.views;
+  });
+  data.summary = stats.map((s, i) =>
+    `Image ${i + 1}: ${sec(s.ms)} sec, viewed ${s.views} time${s.views === 1 ? "" : "s"}`
+  ).join(" | ");
+  data.total_viewing_seconds = sec(stats.reduce((a, s) => a + s.ms, 0));
+  data.total_time_in_quiz_seconds = sec(performance.now() - sessionStart);
+  data.submitted_at = new Date().toISOString();
+  data.device = navigator.userAgent;
+
+  // Build a real HTML form: <form action="FORMSPREE_URL" method="POST">
+  const form = document.createElement("form");
+  form.action = FORMSPREE_URL;
+  form.method = "POST";
+  form.style.display = "none";
+  Object.entries(data).forEach(([name, value]) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  });
+  document.body.appendChild(form);
+
+  btn.disabled = true;
+  status.textContent = "Sending…";
+  form.submit();
+};
+</script>
+</body>
+</html>
